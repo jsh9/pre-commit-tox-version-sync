@@ -53,12 +53,30 @@ def test_cli_success_exit_code_and_stdout(tmp_path: Path, capsys: pytest.Capture
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert captured.out == "OK: muff==0.15.18 matches pre-commit rev for 1 tox env.\n"
+    assert captured.out == (
+        "OK: muff==0.15.18 is synced with pre-commit rev for 1 tox env.\n"
+    )
     assert captured.err == ""
 
 
-def test_cli_failure_exit_code_and_stdout(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_changed_file_exit_code_and_stdout(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     write_project(tmp_path, dep="muff==0.15.17")
+
+    exit_code = main(cli_args(tmp_path))
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == "updated tox.ini: pinned muff==0.15.18 in muff-lint\n"
+    assert captured.err == ""
+    assert "muff==0.15.18" in (tmp_path / "tox.ini").read_text(encoding="utf-8")
+
+
+def test_cli_unfixable_failure_exit_code_and_stdout(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_project(tmp_path, dep="muff>=0.15")
 
     exit_code = main(cli_args(tmp_path))
 
@@ -66,9 +84,11 @@ def test_cli_failure_exit_code_and_stdout(tmp_path: Path, capsys: pytest.Capture
     assert exit_code == 1
     assert captured.out == (
         "pre-commit/tox version sync failed:\n"
-        "- muff-lint: muff==0.15.17 does not match pre-commit rev 0.15.18\n"
+        "- muff-lint: 'muff' must be bare or pinned with exactly one == specifier "
+        "(found 'muff>=0.15')\n"
     )
     assert captured.err == ""
+    assert "muff>=0.15" in (tmp_path / "tox.ini").read_text(encoding="utf-8")
 
 
 def test_cli_config_error_exit_code_and_stderr(

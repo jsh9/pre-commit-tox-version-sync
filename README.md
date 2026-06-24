@@ -1,10 +1,10 @@
 # pre-commit-tox-version-sync
 
-Check that selected pre-commit hook revs match exact dependency pins in selected
-tox environments.
+Pin selected tox dependency versions to matching pre-commit hook revs.
 
 The initial use case is keeping `muff` aligned between `pre-commit` and `tox`.
-The hook is check-only: it reports mismatches but does not edit files.
+The hook rewrites bare or stale exact tox dependency pins and reports failures
+for missing or ambiguous dependency specs.
 
 ## Usage
 
@@ -13,7 +13,7 @@ Add the hook to `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/jsh9/pre-commit-tox-version-sync
-    rev: v0.1.0
+    rev: 0.1.1
     hooks:
       - id: sync-precommit-tox-versions
         args:
@@ -38,7 +38,7 @@ repos:
       - id: muff-format
 ```
 
-the selected tox environments will pin to the same package version:
+the selected tox environments will be pinned to the same package version:
 
 ```ini
 [testenv:muff-lint]
@@ -63,6 +63,6 @@ deps =
 
 ## Exit Codes
 
-- `0`: every selected tox env pins `tox_dep==pre_commit_rev`.
-- `1`: the selected repo, env, dependency, pin, or version check failed.
+- `0`: every selected tox env already pins `tox_dep==pre_commit_rev`.
+- `1`: `tox.ini` was updated, or an unfixable sync failure remains.
 - `2`: hook arguments are invalid or a config file is unreadable or unparseable.

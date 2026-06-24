@@ -15,6 +15,11 @@ class DependencyPin:
     requirement: str
     version: str | None
     is_exact: bool
+    is_bare: bool
+
+    @property
+    def is_rewritable(self) -> bool:
+        return self.is_bare or self.is_exact
 
 
 def find_dependency_pin(dep_lines: list[str], package_name: str) -> DependencyPin | None:
@@ -37,14 +42,37 @@ def find_dependency_pin(dep_lines: list[str], package_name: str) -> DependencyPi
 
 def _classify_pin(original_line: str, requirement: Requirement) -> DependencyPin:
     specifiers = list(requirement.specifier)
+    if not specifiers:
+        return DependencyPin(
+            requirement=original_line,
+            version=None,
+            is_exact=False,
+            is_bare=True,
+        )
+
     if len(specifiers) != 1:
-        return DependencyPin(requirement=original_line, version=None, is_exact=False)
+        return DependencyPin(
+            requirement=original_line,
+            version=None,
+            is_exact=False,
+            is_bare=False,
+        )
 
     specifier = specifiers[0]
     if specifier.operator != "==" or "*" in specifier.version:
-        return DependencyPin(requirement=original_line, version=None, is_exact=False)
+        return DependencyPin(
+            requirement=original_line,
+            version=None,
+            is_exact=False,
+            is_bare=False,
+        )
 
-    return DependencyPin(requirement=original_line, version=specifier.version, is_exact=True)
+    return DependencyPin(
+        requirement=original_line,
+        version=specifier.version,
+        is_exact=True,
+        is_bare=False,
+    )
 
 
 def canonical_package_name(package_name: str) -> NormalizedName:

@@ -7,21 +7,27 @@ from pathlib import Path
 
 from .pre_commit_config import load_pre_commit_revs
 from .requirements import find_dependency_pin
-from .tox_config import load_tox_env_deps
+from .tox_config import load_tox_env_deps, sync_tox_env_deps
 
 
 @dataclass(frozen=True)
 class CheckResult:
-    """Result of a version sync check."""
+    """Result of a version sync run."""
 
     expected_version: str | None
     failures: list[str]
     checked_envs: int
     package_name: str
+    tox_ini: Path
+    changed_envs: list[str]
 
     @property
     def ok(self) -> bool:
-        return not self.failures
+        return not self.failures and not self.changed
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.changed_envs)
 
 
 def check_versions(
@@ -33,10 +39,9 @@ def check_versions(
     tox_dep: str,
     strip_rev_prefix: str,
 ) -> CheckResult:
-    """Check selected pre-commit repo revs against tox dependency pins."""
+    """Sync selected tox dependency pins to pre-commit repo revs."""
 
     raw_revs = load_pre_commit_revs(pre_commit_config, pre_commit_repos)
-    env_deps = load_tox_env_deps(tox_ini, tox_envs)
 
     failures: list[str] = []
     normalized_revs: dict[str, str] = {}
@@ -58,6 +63,24 @@ def check_versions(
             )
             failures.append(f"pre-commit repos resolve to different versions: {versions}")
 
+    if expected_version is not None and not failures:
+        tox_result = sync_tox_env_deps(
+            tox_ini,
+            tox_envs,
+            tox_dep,
+            expected_version,
+        )
+        failures.extend(tox_result.failures)
+        return CheckResult(
+            expected_version=expected_version,
+            failures=failures,
+            checked_envs=tox_result.checked_envs,
+            package_name=tox_dep,
+            tox_ini=tox_ini,
+            changed_envs=tox_result.changed_envs,
+        )
+
+    env_deps = load_tox_env_deps(tox_ini, tox_envs)
     checked_envs = 0
     for env_name, dep_lines in env_deps.items():
         if dep_lines is None:
@@ -77,17 +100,13 @@ def check_versions(
             )
             continue
 
-        if expected_version is not None and dep_pin.version != expected_version:
-            failures.append(
-                f"{env_name}: {tox_dep}=={dep_pin.version} does not match "
-                f"pre-commit rev {expected_version}"
-            )
-
     return CheckResult(
         expected_version=expected_version,
         failures=failures,
         checked_envs=checked_envs,
         package_name=tox_dep,
+        tox_ini=tox_ini,
+        changed_envs=[],
     )
 
 
@@ -103,12 +122,29 @@ def format_success(result: CheckResult) -> str:
     version = result.expected_version or "<unknown>"
     env_label = "tox env" if result.checked_envs == 1 else "tox envs"
     return (
-        f"OK: {result.package_name}=={version} matches pre-commit rev "
+        f"OK: {result.package_name}=={version} is synced with pre-commit rev "
         f"for {result.checked_envs} {env_label}."
     )
 
 
 def format_failure(result: CheckResult) -> str:
-    lines = ["pre-commit/tox version sync failed:"]
-    lines.extend(f"- {failure}" for failure in result.failures)
+    lines: list[str] = []
+    if result.changed:
+        envs = ", ".join(result.changed_envs)
+        version = result.expected_version or "<unknown>"
+        lines.append(
+            f"updated {_display_path(result.tox_ini)}: pinned "
+            f"{result.package_name}=={version} in {envs}"
+        )
+
+    if result.failures:
+        lines.append("pre-commit/tox version sync failed:")
+        lines.extend(f"- {failure}" for failure in result.failures)
+
     return "\n".join(lines)
+
+
+def _display_path(path: Path) -> str:
+    if path.is_absolute():
+        return path.name
+    return str(path)
