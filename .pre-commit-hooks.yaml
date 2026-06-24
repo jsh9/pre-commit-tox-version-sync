@@ -1,0 +1,7 @@
+- id: sync-precommit-tox-versions
+  name: Sync pre-commit and tox dependency versions
+  description: Check that selected pre-commit repo revs match exact tox dependency pins.
+  entry: sync-precommit-tox-versions
+  language: python
+  pass_filenames: false
+  always_run: true
